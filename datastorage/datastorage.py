@@ -4,6 +4,7 @@
     to the DataStorage class """
 import numpy as np
 import os
+import math
 import h5py
 import collections
 import logging
@@ -77,8 +78,9 @@ def dictToH5Group(d, group, link_copy=True):
             elif isinstance(value, np.ndarray) and value.ndim == 1 and isinstance(value[0], np.ndarray):
                 group.create_group(key)
                 group[key].attrs["IS_LIST_OF_ARRAYS"] = True
+                fmt = "index%%0%dd" % math.ceil(np.log10(len(value)))
                 for index, array in enumerate(value):
-                    dictToH5Group({"index%010d" % index: array},
+                    dictToH5Group({fmt % index: array},
                                   group[key], link_copy=link_copy)
                 # don't even try to save as generic call group[key]=value
                 TOTRY = False
