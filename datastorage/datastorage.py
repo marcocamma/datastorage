@@ -310,12 +310,12 @@ class DataStorage(dict):
                     "x".join(map(str, obj.shape)), obj.dtype)
             elif isinstance(obj, DataStorage):
                 value_str = str(obj)[:50]
-            elif isinstance(obj, (str, DataStorage)):
-                value_str = obj[:50]
+            elif isinstance(obj, str):
+                value_str = obj[:50].replace('\r\n','\n').replace("\n"," ")
             elif self[k] is None:
                 value_str = "None"
-            else:
-                value_str = str(self[k])
+            else: 
+                value_str = str(self[k]).replace('\r\n','\n').replace("\n"," ")
             if len(str(obj)) > 50:
                 value_str += " ..."
             s.append(fmt % (k, value_str))
