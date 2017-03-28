@@ -10,7 +10,11 @@ import collections
 import logging
 log = logging.getLogger(__name__)
 
-_array_cache = {}
+
+# make sure dictionaries are ordered (somehow it does not work !)
+#dict = collections.OrderedDict
+
+_array_cache = dict()
 
 
 def unwrapArray(a, recursive=True, readH5pyDataset=True):
@@ -26,6 +30,10 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
         a = a[...]
     if isinstance(a, h5py.Dataset) and a.shape == ():
         a = a[...]
+    if isinstance(a, h5py.Group) and "IS_LIST" in a.attrs:
+        items = list(a.keys())
+        items.sort()
+        a = [unwrapArray(a[item],readH5pyDataset=readH5pyDataset) for item in items]
     if isinstance(a, h5py.Group) and "IS_LIST_OF_ARRAYS" in a.attrs:
         items = list(a.keys())
         items.sort()
@@ -61,15 +69,26 @@ def dictToH5Group(d, group, link_copy=True):
                     the current implementation uses memory though ...
     """
     global _array_cache
+    _array_cache = dict()
     for key, value in d.items():
         TOTRY = True
+        # try to convert iterables to arrays
         if isinstance(value, (list, tuple)):
             value = np.asarray(value)
+        # ... but revert them back if their elements are not native
+        if isinstance(value,np.ndarray) and value.dtype.char == "O": value = list(value)
         if isinstance(value, dict):
             group.create_group(key)
             dictToH5Group(value, group[key], link_copy=link_copy)
         elif value is None:
             group[key] = "NONE_PYTHON_OBJECT"
+        elif isinstance(value, (list, tuple)):
+          group.create_group(key)
+          group[key].attrs["IS_LIST"] = True
+          fmt = "index%%0%dd" % math.ceil(np.log10(len(value)))
+          for index, array in enumerate(value):
+              dictToH5Group({fmt % index: array},
+                            group[key], link_copy=link_copy)
         elif isinstance(value, np.ndarray):
             # take care of unicode (h5py can't handle numpy unicode arrays)
             if value.dtype.char == "U":
@@ -113,7 +132,6 @@ def dictToH5Group(d, group, link_copy=True):
 
 def dictToH5(h5, d, link_copy=False):
     """ Save a dictionary into an hdf5 file
-        TODO: add capability of saving list of array
         h5py is not capable of handling dictionaries natively"""
     h5 = h5py.File(h5, mode="w")
 #  group = h5.create_group("/")
@@ -148,9 +166,6 @@ def dictToNpy(npyFile, d): np.save(npyFile, d)
 
 def objToDict(o, recursive=True):
     """ convert a DictWrap to a dictionary (useful for saving); it should work for other objects too 
-        TODO: this function does not catch a list of DataStorage instances like
-        objToDict( ( DataStorage(), DataStorage() ) )
-        is not converted !!
     """
     if "items" not in dir(o):
         return o
@@ -265,7 +280,7 @@ class DataStorage(dict):
         self.update(**dict(d))
 
     def __setitem__(self, key, value):
-        # print("__setitem__")
+        #print("__setitem__")
         setattr(self, key, value)
         super().__setitem__(key, value)
 
@@ -273,11 +288,16 @@ class DataStorage(dict):
         """ allows to add fields with data.test=4 """
         # check if attr exists is essential (or it fails when defining an
         # instance)
+        #print("self.__setattr__")
         if hasattr(self, "_recursive") and self._recursive and \
                 isinstance(value, (dict, collections.OrderedDict)):
               value = DataStorage(value)
         super().__setitem__(key, value)
         super().__setattr__(key, value)
+
+    def update(self,dictionary=None,**kwargs):
+      if dictionary is None: dictionary=kwargs
+      for (key,value) in dictionary.items(): self.__setitem__(key,value)
 
     def __delitem__(self, key):
         delattr(self, key)
@@ -320,6 +340,9 @@ class DataStorage(dict):
                 value_str += " ..."
             s.append(fmt % (k, value_str))
         return "\n".join(s)
+
+#    def __getitem__(self,x):
+#      if x[0] != "_": return x
 
     def keys(self):
         keys = list(super().keys())
