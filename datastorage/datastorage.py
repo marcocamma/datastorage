@@ -70,7 +70,9 @@ def dictToH5Group(d, group, link_copy=True):
     """
     global _array_cache
     _array_cache = dict()
-    for key, value in d.items():
+    for key in d.keys():
+        value = d[key]
+        log.debug("saving",key,"in",group)
         TOTRY = True
         # try to convert iterables to arrays
         if isinstance(value, (list, tuple)):
@@ -280,12 +282,12 @@ class DataStorage(dict):
         self.update(**dict(d))
 
     def __setitem__(self, key, value):
+        """ method to add a key via obj["key"] = value """
         #print("__setitem__")
         setattr(self, key, value)
-        super().__setitem__(key, value)
 
     def __setattr__(self, key, value):
-        """ allows to add fields with data.test=4 """
+        """ method to add a key via obj.key = value """
         # check if attr exists is essential (or it fails when defining an
         # instance)
         #print("self.__setattr__")
