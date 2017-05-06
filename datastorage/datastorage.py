@@ -182,7 +182,14 @@ def objToDict(o, recursive=True):
     return d
 
 
-def read(fname):
+def read(fname,raiseError=True):
+    err_msg = "File " + fname + " does not exist"
+    if not os.path.isfile(fname):
+        if raiseError:
+            raise ValueError(err_msg)
+        else:
+            log.error(err_msg)
+            return None
     extension = os.path.splitext(fname)[1]
     log.info("Reading storage file %s" % fname)
     if extension == ".npz":
@@ -192,8 +199,15 @@ def read(fname):
     elif extension == ".h5":
         return DataStorage(h5ToDict(fname))
     else:
-        raise ValueError(
-            "Extension must be h5, npy or npz, it was %s" % extension)
+        try:
+            return DataStorage(h5ToDict(fname))
+        except Exception as e:
+            err_msg = "Could not read " + fname + " as hdf5 file, error was: %s"%e
+            log.error(err_msg)
+            if raiseError:
+                raise ValueError(err_msg)
+            else:
+                return None
 
 
 def save(fname, d, link_copy=True):
