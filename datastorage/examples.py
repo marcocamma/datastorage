@@ -33,6 +33,12 @@ data.key5 = [1,2,3]
 # but this will not work...(or rather will not be saved)
 # data.key5 = [1,np.arange(10)]
 
+# convert object to Datastorage
+class MM:
+    def __init__(self):
+        self.f = sum
+ds(MM())
+
 
 ## Save and read ##
 
