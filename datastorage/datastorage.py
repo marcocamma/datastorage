@@ -265,23 +265,27 @@ class DataStorage(dict):
         self._recursive = recursive
         # interpret kwargs as dict if there are
         if len(kwargs) != 0:
-            fileOrDict = dict(kwargs)
+            input_data = dict(kwargs)
         elif len(kwargs) == 0 and len(args) > 0:
-            fileOrDict = args[0]
+            input_data = args[0]
         else:
-            fileOrDict = dict()
+            input_data = dict()
 
         d = dict()  # data dictionary
-        if isinstance(fileOrDict, dict):
-            d = fileOrDict
-        elif isinstance(fileOrDict, str):
-            if os.path.isfile(fileOrDict):
-                d = read(fileOrDict)
+        if isinstance(input_data, dict):
+            d = input_data
+        elif isinstance(input_data, str):
+            if os.path.isfile(input_data):
+                d = read(input_data)
             else:
-                self.filename = fileOrDict
+                self.filename = input_data
                 d = dict()
         else:
-            raise ValueError("Invalid DataStorage definition")
+            try:
+                d = input_data.__dict__
+            except AttributeError:
+                log.error("Could not interpret input as object to package")
+                raise ValueError("Invalid DataStorage definition")
 
         if recursive:
             for k in d.keys():
