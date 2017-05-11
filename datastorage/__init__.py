@@ -1,4 +1,4 @@
 from .datastorage import DataStorage, read, save
 from .test import doTest
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"

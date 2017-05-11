@@ -1,3 +1,4 @@
+from __future__ import print_function
 """ npy/npz/hdf5 file based storage; 
     this modules adds the possibility to dump and load objects in files and
     a more convenient was of accessing the data via the .attributedict thanks
@@ -233,13 +234,20 @@ def save(fname, d, link_copy=True):
 
 
 class DataStorage(dict):
-    """ Storage for dict like object.
-        recursive : bool
-           recursively convert dict-like objects to DataStorage
+    """ Storage for dict like object. It also tries to convert general
+        objects to instances by using __dict__
+
         It can save data to file (format npy,npz or h5)
 
-        To initialize it:
+        Parameters
+        ----------
+        filename : str
+           default filename to use for saving
+        recursive : bool
+           recursively convert dict-like objects to DataStorage
 
+        Examples
+        --------
           data = DataStorage( a=(1,2,3),b="add",filename='store.npz' )
 
           # recursively by default
@@ -259,10 +267,10 @@ class DataStorage(dict):
           data = DataStorage()
     """
 
-    def __init__(self, *args, filename='data_storage.npz', recursive=True, **kwargs):
-        #    self.filename = kwargs.pop('filename',"data_storage.npz")
-        self.filename = filename
-        self._recursive = recursive
+    def __init__(self, *args, **kwargs):
+        self.filename = kwargs.pop('filename',"data_storage.npz")
+        self._recursive = kwargs.pop('recursive',True)
+
         # interpret kwargs as dict if there are
         if len(kwargs) != 0:
             input_data = dict(kwargs)
@@ -287,7 +295,7 @@ class DataStorage(dict):
                 log.error("Could not interpret input as object to package")
                 raise ValueError("Invalid DataStorage definition")
 
-        if recursive:
+        if self._recursive:
             for k in d.keys():
                 if not isinstance(d[k], DataStorage) and isinstance(d[k], dict):
                     d[k] = DataStorage(d[k])
@@ -312,8 +320,8 @@ class DataStorage(dict):
         if hasattr(self, "_recursive") and self._recursive and \
                 isinstance(value, (dict, collections.OrderedDict)):
               value = DataStorage(value)
-        super().__setitem__(key, value)
-        super().__setattr__(key, value)
+        super(DataStorage,self).__setitem__(key, value)
+        super(DataStorage,self).__setattr__(key, value)
 
     def update(self,dictionary=None,**kwargs):
       if dictionary is None: dictionary=kwargs
@@ -321,7 +329,7 @@ class DataStorage(dict):
 
     def __delitem__(self, key):
         delattr(self, key)
-        super().__delitem__(key)
+        super(DataStorage,self).__delitem__(key)
 
     def __str__(self):
         keys = list(self.keys())
@@ -365,7 +373,7 @@ class DataStorage(dict):
 #      if x[0] != "_": return x
 
     def keys(self):
-        keys = list(super().keys())
+        keys = list(super(DataStorage,self).keys())
         keys = [k for k in keys if k != 'filename']
         keys = [k for k in keys if k[0] != '_']
         return keys
