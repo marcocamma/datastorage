@@ -77,7 +77,11 @@ def dictToH5Group(d, group, link_copy=True):
         TOTRY = True
         # try to convert iterables to arrays
         if isinstance(value, (list, tuple)):
-            value = np.asarray(value)
+            try: 
+                # it might fail: eg. np.asarray( ("ciao",np.arange(10) ) )
+                value = np.asarray(value)
+            except ValueError:
+                pass
         # ... but revert them back if their elements are not native
         if isinstance(value,np.ndarray) and value.dtype.char == "O": value = list(value)
         if isinstance(value, dict):
