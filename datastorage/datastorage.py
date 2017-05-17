@@ -26,40 +26,43 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
           * handle the None python object
           * numpy unicode ...
     """
-    # is h5py dataset convert to array
-    if isinstance(a, h5py.Dataset) and readH5pyDataset:
-        a = a[...]
-    if isinstance(a, h5py.Dataset) and a.shape == ():
-        a = a[...]
-    if isinstance(a, h5py.Group) and "IS_LIST" in a.attrs:
-        items = list(a.keys())
-        items.sort()
-        a = [unwrapArray(a[item],readH5pyDataset=readH5pyDataset) for item in items]
-    if isinstance(a, h5py.Group) and "IS_LIST_OF_ARRAYS" in a.attrs:
-        items = list(a.keys())
-        items.sort()
-        a = np.asarray([a[item][...] for item in items])
-    if isinstance(a, np.ndarray) and a.ndim == 0:
-        a = a.item()
-    if isinstance(a, np.ndarray) and a.dtype.char == "S":
-        a = a.astype(str)
-    if recursive:
-        if "items" in dir(a):  # dict, h5py groups, npz file
-            a = dict(a)  # convert to dict, otherwise can't asssign values
-            for key, value in a.items():
-                a[key] = unwrapArray(value)
-        elif isinstance(a, (list, tuple)):
-            a = [unwrapArray(element) for element in a]
-        else:
-            pass
-    if isinstance(a, dict):
-        a = DataStorage(a)
-    # restore None that cannot be saved in h5py
-    if isinstance(a, str) and a == "NONE_PYTHON_OBJECT":
-        a = None
-    # h5py can't save numpy unicode
-    if isinstance(a, np.ndarray) and a.dtype.char == "S":
-        a = a.astype(str)
+    try:
+        # is h5py dataset convert to array
+        if isinstance(a, h5py.Dataset) and readH5pyDataset:
+            a = a[...]
+        if isinstance(a, h5py.Dataset) and a.shape == ():
+            a = a[...]
+        if isinstance(a, h5py.Group) and "IS_LIST" in a.attrs:
+            items = list(a.keys())
+            items.sort()
+            a = [unwrapArray(a[item],readH5pyDataset=readH5pyDataset) for item in items]
+        if isinstance(a, h5py.Group) and "IS_LIST_OF_ARRAYS" in a.attrs:
+            items = list(a.keys())
+            items.sort()
+            a = np.asarray([a[item][...] for item in items])
+        if isinstance(a, np.ndarray) and a.ndim == 0:
+            a = a.item()
+        if isinstance(a, np.ndarray) and a.dtype.char == "S":
+            a = a.astype(str)
+        if recursive:
+            if "items" in dir(a):  # dict, h5py groups, npz file
+                a = dict(a)  # convert to dict, otherwise can't asssign values
+                for key, value in a.items():
+                    a[key] = unwrapArray(value)
+            elif isinstance(a, (list, tuple)):
+                a = [unwrapArray(element) for element in a]
+            else:
+                pass
+        if isinstance(a, dict):
+            a = DataStorage(a)
+        # restore None that cannot be saved in h5py
+        if isinstance(a, str) and a == "NONE_PYTHON_OBJECT":
+            a = None
+        # h5py can't save numpy unicode
+        if isinstance(a, np.ndarray) and a.dtype.char == "S":
+            a = a.astype(str)
+    except Exception as e:
+        log.warning("Could not handle %s, error was: %s"%(a.name,str(e)))
     return a
 
 
