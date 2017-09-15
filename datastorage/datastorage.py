@@ -48,9 +48,10 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
             if "items" in dir(a):  # dict, h5py groups, npz file
                 a = dict(a)  # convert to dict, otherwise can't asssign values
                 for key, value in a.items():
-                    a[key] = unwrapArray(value)
+                    a[key] = unwrapArray(value,readH5pyDataset=readH5pyDataset)
             elif isinstance(a, (list, tuple)):
-                a = [unwrapArray(element) for element in a]
+                a = [unwrapArray(element,readH5pyDataset=readH5pyDataset) 
+                    for element in a]
             else:
                 pass
         if isinstance(a, dict):
@@ -95,23 +96,29 @@ def dictToH5Group(d, group, link_copy=True):
         elif isinstance(value, (list, tuple)):
           group.create_group(key)
           group[key].attrs["IS_LIST"] = True
-          fmt = "index%%0%dd" % math.ceil(np.log10(len(value)))
-          for index, array in enumerate(value):
-              dictToH5Group({fmt % index: array},
-                            group[key], link_copy=link_copy)
+          if len(value) > 0:
+            fmt = "index%%0%dd" % math.ceil(np.log10(len(value)))
+            for index, array in enumerate(value):
+                dictToH5Group({fmt % index: array},
+                              group[key], link_copy=link_copy)
+          else:
+            group[key] = value
         elif isinstance(value, np.ndarray):
             # take care of unicode (h5py can't handle numpy unicode arrays)
             if value.dtype.char == "U":
                 value = np.asarray([vv.encode('ascii') for vv in value])
             # check if it is list of array
-            elif isinstance(value, np.ndarray) and value.ndim == 1 and isinstance(value[0], np.ndarray):
-                group.create_group(key)
-                group[key].attrs["IS_LIST_OF_ARRAYS"] = True
-                fmt = "index%%0%dd" % math.ceil(np.log10(len(value)))
-                for index, array in enumerate(value):
-                    dictToH5Group({fmt % index: array},
+            elif isinstance(value, np.ndarray) and value.ndim == 1: # and isinstance(value[0], np.ndarray):
+                if len(value) > 0:
+                  group.create_group(key)
+                  group[key].attrs["IS_LIST_OF_ARRAYS"] = True
+                  fmt = "index%%0%dd" % math.ceil(np.log10(len(value)))
+                  for index, array in enumerate(value):
+                      dictToH5Group({fmt % index: array},
                                   group[key], link_copy=link_copy)
-                # don't even try to save as generic call group[key]=value
+                  # don't even try to save as generic call group[key]=value
+                else:
+                  group[key] = value
                 TOTRY = False
             if link_copy:
                 found_address = None
@@ -151,8 +158,9 @@ def dictToH5(h5, d, link_copy=False):
 
 def h5ToDict(h5, readH5pyDataset=True):
     """ Read a hdf5 file into a dictionary """
-    with h5py.File(h5, "r") as h:
-        ret = unwrapArray(h, recursive=True, readH5pyDataset=readH5pyDataset)
+    h = h5py.File(h5, "r")
+    ret = unwrapArray(h, recursive=True, readH5pyDataset=readH5pyDataset)
+    if readH5pyDataset: h.close()
     return ret
 
 
@@ -190,7 +198,7 @@ def objToDict(o, recursive=True):
     return d
 
 
-def read(fname,raiseError=True):
+def read(fname,raiseError=True,readH5pyDataset=True):
     err_msg = "File " + fname + " does not exist"
     if not os.path.isfile(fname):
         if raiseError:
@@ -205,10 +213,10 @@ def read(fname,raiseError=True):
     elif extension == ".npy":
         return DataStorage(npyToDict(fname))
     elif extension == ".h5":
-        return DataStorage(h5ToDict(fname))
+        return DataStorage(h5ToDict(fname,readH5pyDataset=readH5pyDataset))
     else:
         try:
-            return DataStorage(h5ToDict(fname))
+            return DataStorage(h5ToDict(fname,readH5pyDataset=readH5pyDataset))
         except Exception as e:
             err_msg = "Could not read " + fname + " as hdf5 file, error was: %s"%e
             log.error(err_msg)
@@ -218,7 +226,7 @@ def read(fname,raiseError=True):
                 return None
 
 
-def save(fname, d, link_copy=True):
+def save(fname, d, link_copy=True,raiseError=False):
     """ link_copy is used by hdf5 saving only, it allows to creat link of identical arrays (saving space) """
     # make sure the object is dict (recursively) this allows reading it
     # without the DataStorage module
@@ -238,6 +246,7 @@ def save(fname, d, link_copy=True):
                 "Extension must be h5, npy or npz, it was %s" % extension)
     except Exception as e:
         log.exception("Could not save %s" % fname)
+        if raiseError: raise  e
 
 
 class DataStorage(dict):
@@ -357,7 +366,7 @@ class DataStorage(dict):
             obj = self[k]
             if ((isinstance(obj, np.ndarray) and obj.ndim == 1) or \
                 isinstance(obj, (list, tuple))) and \
-                all([isinstance(v, np.ndarray) for v in obj]):
+                all((isinstance(v, np.ndarray) for v in obj)):
                 value_str = "list of arrays, shapes " + \
                     ",".join([str(v.shape) for v in obj[:5]]) + " ..."
             elif isinstance(obj, np.ndarray):
@@ -385,7 +394,7 @@ class DataStorage(dict):
         keys = [k for k in keys if k[0] != '_']
         return keys
 
-    def save(self, fname=None, link_copy=False):
+    def save(self, fname=None, link_copy=False,raiseError=False):
         """ link_copy: only works in hfd5 format
             save space by creating link when identical arrays are found,
             it slows down the saving (3 or 4 folds) but saves A LOT of space
@@ -395,4 +404,4 @@ class DataStorage(dict):
         if fname is None:
             fname = self.filename
         assert fname is not None
-        save(fname, self, link_copy=link_copy)
+        save(fname, self, link_copy=link_copy,raiseError=raiseError)
