@@ -5,7 +5,7 @@ def readme():
         return f.read()
 
 setup(name='datastorage',
-      version='0.3.7',
+      version='0.3.8',
       description='Dict-like object that can be saved in hdf5 or numpy format',
       long_description=readme(),
       url='https://github.com/marcocamma/datastorage',
