@@ -26,24 +26,35 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
           * handle the None python object
           * numpy unicode ...
     """
-    try:
-        # is h5py dataset convert to array
-        if isinstance(a, h5py.Dataset) and readH5pyDataset:
-            a = a[...]
-        if isinstance(a, h5py.Dataset) and a.shape == ():
-            a = a[...]
-        if isinstance(a, h5py.Group) and "IS_LIST" in a.attrs:
-            items = list(a.keys())
-            items.sort()
-            a = [unwrapArray(a[item],readH5pyDataset=readH5pyDataset) for item in items]
-        if isinstance(a, h5py.Group) and "IS_LIST_OF_ARRAYS" in a.attrs:
-            items = list(a.keys())
-            items.sort()
-            a = np.asarray([a[item][...] for item in items])
+#    try:
+    if True:
+
+        ### take care of hdf5 groups 
+        if isinstance(a,h5py.Group):
+            # take care of special flags first
+            if isinstance(a, h5py.Group) and ( ("IS_LIST" in a.attrs) or ("IS_LIST_OF_ARRAYS" in a.attrs) ):
+                items = list(a.keys())
+                items.sort()
+                a = [unwrapArray(a[item],readH5pyDataset=readH5pyDataset) for item in items]
+
+
+        ### take care of hdf5 datasets
+        elif isinstance(a,h5py.Dataset):
+
+            # read if asked so or if dummy array
+            if readH5pyDataset or a.shape == (): a = a[...]
+
+            # special None flag
+            if isinstance(a, str) and a == "NONE_PYTHON_OBJECT": a = None
+ 
+        # clean up non-hdf5 specific
         if isinstance(a, np.ndarray) and a.ndim == 0:
             a = a.item()
+
+        # convert to str (for example h5py can't save numpy unicode)
         if isinstance(a, np.ndarray) and a.dtype.char == "S":
             a = a.astype(str)
+
         if recursive:
             if "items" in dir(a):  # dict, h5py groups, npz file
                 a = dict(a)  # convert to dict, otherwise can't asssign values
@@ -54,17 +65,33 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
                     for element in a]
             else:
                 pass
-        if isinstance(a, dict):
-            a = DataStorage(a)
-        # restore None that cannot be saved in h5py
-        if isinstance(a, str) and a == "NONE_PYTHON_OBJECT":
-            a = None
-        # h5py can't save numpy unicode
-        if isinstance(a, np.ndarray) and a.dtype.char == "S":
-            a = a.astype(str)
-    except Exception as e:
-        log.warning("Could not handle %s, error was: %s"%(a.name,str(e)))
+
+#    except Exception as e:
+#        log.warning("Could not handle %s, error was: %s"%(a.name,str(e)))
     return a
+
+
+
+
+def _find_link(value,group,key):
+    global _array_cache
+    name = "%s/%s" % (group.name,key)
+    name = name.replace("//","/")
+    if not isinstance(value,np.ndarray): return None
+    found_address = None
+    for address, array in _array_cache.items():
+        if np.array_equal(array, value):
+            log.info("Found array in cache, asked for %s, found as %s" % (name,address))
+            found_address = address
+            break
+    if found_address is not None:
+        value = group.file[found_address]
+    else:
+        log.info("Adding array %s to cache" % name)
+        _array_cache[name] = value
+#    print(list(_array_cache.keys()))
+    return value
+
 
 
 def dictToH5Group(d, group, link_copy=True):
@@ -73,87 +100,51 @@ def dictToH5Group(d, group, link_copy=True):
         link_copy = True, tries to save space in the hdf file by creating an internal link.
                     the current implementation uses memory though ...
     """
-    global _array_cache
-    _array_cache = dict()
     for key in d.keys():
         value = d[key]
         log.debug("saving",key,"in",group)
-        TOTRY = True
-        # try to convert iterables to arrays
-        if isinstance(value, (list, tuple)):
-            try: 
-                # it might fail: eg. np.asarray( ("ciao",np.arange(10) ) )
-                value = np.asarray(value)
-            except ValueError:
-                pass
-        # ... but revert them back if their elements are not native
-        if isinstance(value,np.ndarray) and value.dtype.char == "O": value = list(value)
-        if isinstance(value, dict):
-            group.create_group(key)
-            dictToH5Group(value, group[key], link_copy=link_copy)
-        elif value is None:
-            group[key] = "NONE_PYTHON_OBJECT"
-        elif isinstance(value, (list, tuple)):
-          group.create_group(key)
-          group[key].attrs["IS_LIST"] = True
-          if len(value) > 0:
-            fmt = "index%%0%dd" % math.ceil(np.log10(len(value)))
-            for index, array in enumerate(value):
-                dictToH5Group({fmt % index: array},
-                              group[key], link_copy=link_copy)
-          else:
+        # hope for the best (i.e. h5py can handle that)
+        try:
+            if link_copy and isinstance(value,np.ndarray):
+              value=_find_link(value,group,key)
+            else:
+              if isinstance(value,h5py.Dataset): value = value[:]; # hdf5 dataset have to be read first ...
             group[key] = value
-        elif isinstance(value, np.ndarray):
+        except (TypeError,ValueError):
+            log.info("For %s, h5py could not handle the saving on its own, trying to convert it"%key)
+            if isinstance(value,dict) or hasattr(value,"__dict__"):
+                if key not in group: group.create_group(key)
+                try:
+                    value = dictToH5Group(value,group[key],link_copy=link_copy)
+                # objects have __dict__ but can be coverted to dict like only by DataStorage (and not by dict)
+                except:
+                    value = dictToH5Group(DataStorage(value),group[key],link_copy=link_copy)
             # take care of unicode (h5py can't handle numpy unicode arrays)
-            if value.dtype.char == "U":
+            elif isinstance(value,np.ndarray) and value.dtype.char == "U":
                 value = np.asarray([vv.encode('ascii') for vv in value])
-            # check if it is list of array
-            elif isinstance(value, np.ndarray) and value.ndim == 1: # and isinstance(value[0], np.ndarray):
-                if len(value) > 0:
-                  group.create_group(key)
-                  group[key].attrs["IS_LIST_OF_ARRAYS"] = True
-                  fmt = "index%%0%dd" % math.ceil(np.log10(len(value)))
-                  for index, array in enumerate(value):
-                      dictToH5Group({fmt % index: array},
-                                  group[key], link_copy=link_copy)
-                  # don't even try to save as generic call group[key]=value
-                else:
-                  group[key] = value
-                TOTRY = False
-            if link_copy:
-                found_address = None
-                for address, (file_handle, array) in _array_cache.items():
-                    if np.array_equal(array, value) and group.file == file_handle:
-                        log.info(
-                            "Found array in cache, asked for %s/%s, found as %s" % (group.name, key, address))
-                        found_address = address
-                        break
-                if found_address is not None:
-                    value = group.file[found_address]
-            try:
-                if TOTRY:
-                    group[key] = value
-                    if link_copy:
-                        log.info("Addind array %s to cache" %
-                                 (group[key].name))
-                        _array_cache[group[key].name] = (group.file, value)
-            except Exception as e:
-                log.warning("Can't save %s, error was %s" % (key, e))
-        # try saving everything else that is not dict or array
-        else:
-            try:
                 group[key] = value
-            except Exception as e:
-                log.error("Can't save %s, error was %s" % (key, e))
+            elif isinstance(value, collections.Iterable):
+                if key not in group: group.create_group(key)
+                group[key].attrs["IS_LIST"] = True
+                fmt = "index%%0%dd" % math.ceil(np.log10(len(value)))
+                for index, array in enumerate(value):
+                    dictToH5Group({fmt % index: array},
+                              group[key], link_copy=link_copy)
+            elif value is None:
+                group[key] = "NONE_PYTHON_OBJECT"
+            else:
+                log.warn("Could not convert %s into an object that can be saved"%key)
 
 
 def dictToH5(h5, d, link_copy=False):
     """ Save a dictionary into an hdf5 file
         h5py is not capable of handling dictionaries natively"""
+    global _array_cache
+    _array_cache = dict()
     h5 = h5py.File(h5, mode="w")
-#  group = h5.create_group("/")
     dictToH5Group(d, h5["/"], link_copy=link_copy)
     h5.close()
+    _array_cache = dict(); # clean up memory ...
 
 
 def h5ToDict(h5, readH5pyDataset=True):
@@ -181,22 +172,26 @@ def dictToNpz(npzFile, d): np.savez(npzFile, **d)
 
 def dictToNpy(npyFile, d): np.save(npyFile, d)
 
-
-def objToDict(o, recursive=True):
-    """ convert a DictWrap to a dictionary (useful for saving); it should work for other objects too 
-    """
-    if "items" not in dir(o):
-        return o
+def _toDict(datastorage_obj,recursive=True):
+    """ this is the recursive part of the toDict (otherwise it fails when converting to DataStorage """
+    if "items" not in dir(datastorage_obj): return datastorage_obj
     d = dict()
-    for k, v in o.items():
+    for k, v in datastorage_obj.items():
         try:
-            d[k] = objToDict(v)
+            d[k] = _toDict(v)
         except Exception as e:
-            log.info("In objToDict, could not convert key %s to dict, error was" %
+            log.info("In toDict, could not convert key %s to dict, error was %s" %
                      (k, e))
             d[k] = v
     return d
+ 
 
+def toDict(datastorage_obj, recursive=True):
+    """ convert a DataStorage object to a dictionary (useful for saving); it should work for other objects too 
+    """
+    # if not a DataStorage, convert to it first
+    if "items" not in dir(datastorage_obj): datastorage_obj = DataStorage(datastorage_obj)
+    return _toDict(datastorage_obj)
 
 def read(fname,raiseError=True,readH5pyDataset=True):
     err_msg = "File " + fname + " does not exist"
@@ -230,7 +225,7 @@ def save(fname, d, link_copy=True,raiseError=False):
     """ link_copy is used by hdf5 saving only, it allows to creat link of identical arrays (saving space) """
     # make sure the object is dict (recursively) this allows reading it
     # without the DataStorage module
-    d = objToDict(d, recursive=True)
+    d = toDict(d, recursive=True)
     d['filename'] = fname
     extension = os.path.splitext(fname)[1]
     log.info("Saving storage file %s" % fname)
@@ -339,10 +334,6 @@ class DataStorage(dict):
         super(DataStorage,self).__setitem__(key, value)
         super(DataStorage,self).__setattr__(key, value)
 
-    def update(self,dictionary=None,**kwargs):
-      if dictionary is None: dictionary=kwargs
-      for (key,value) in dictionary.items(): self.__setitem__(key,value)
-
     def __delitem__(self, key):
         delattr(self, key)
         super(DataStorage,self).__delitem__(key)
@@ -388,6 +379,12 @@ class DataStorage(dict):
 #    def __getitem__(self,x):
 #      if x[0] != "_": return x
 
+    def update(self,dictionary=None,**kwargs):
+      if dictionary is None: dictionary=kwargs
+      for (key,value) in dictionary.items(): self.__setitem__(key,value)
+
+    def toDict(self): return toDict(self)
+
     def keys(self):
         keys = list(super(DataStorage,self).keys())
         keys = [k for k in keys if k != 'filename']
@@ -397,9 +394,9 @@ class DataStorage(dict):
     def save(self, fname=None, link_copy=False,raiseError=False):
         """ link_copy: only works in hfd5 format
             save space by creating link when identical arrays are found,
-            it slows down the saving (3 or 4 folds) but saves A LOT of space
+            it may slows down the saving (3 or 4 folds) but saves space
             when saving different dataset together (since it does not duplicate
-            internal pyfai matrices
+            arrays)
         """
         if fname is None:
             fname = self.filename
