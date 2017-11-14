@@ -26,8 +26,7 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
           * handle the None python object
           * numpy unicode ...
     """
-#    try:
-    if True:
+    try:
 
         ### take care of hdf5 groups 
         if isinstance(a,h5py.Group):
@@ -66,8 +65,8 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
             else:
                 pass
 
-#    except Exception as e:
-#        log.warning("Could not handle %s, error was: %s"%(a.name,str(e)))
+    except Exception as e:
+        log.warning("Could not handle %s, error was: %s"%(a.name,str(e)))
     return a
 
 
