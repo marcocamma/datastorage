@@ -5,6 +5,7 @@ from __future__ import print_function
     to the DataStorage class """
 import numpy as np
 import os
+import sys
 import math
 import h5py
 import collections
@@ -41,10 +42,16 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
         elif isinstance(a,h5py.Dataset):
 
             # read if asked so or if dummy array
-            if readH5pyDataset or a.shape == (): a = a[...]
+            # WARNING: a.value and a[...] do not return the
+            # same thing... 
+            # a[...] returns ndarray if a is a string
+            # a.value returns a str(py3) or unicode(py2)
+            if readH5pyDataset or a.shape == (): a = a.value#[...]
 
-            # special None flag
-            if isinstance(a, str) and a == "NONE_PYTHON_OBJECT": a = None
+
+        # special None flag
+        # not array needed for FutureWarning: elementwise comparison failed; ...
+        if not isinstance(a,np.ndarray) and a == "NONE_PYTHON_OBJECT": a = None
  
         # clean up non-hdf5 specific
         if isinstance(a, np.ndarray) and a.ndim == 0:
@@ -66,7 +73,7 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
                 pass
 
     except Exception as e:
-        log.warning("Could not handle %s, error was: %s"%(a.name,str(e)))
+        log.warning("Could not handle %s, error was: %s"%(a,str(e)))
     return a
 
 
