@@ -385,6 +385,14 @@ class DataStorage(dict):
 #    def __getitem__(self,x):
 #      if x[0] != "_": return x
 
+    def values(self):
+        return [self[k] for k in self.keys()]
+
+    def items(self):
+      keys = self.keys()
+      for k in keys:
+          yield k,self[k]
+
     def update(self,dictionary=None,**kwargs):
       if dictionary is None: dictionary=kwargs
       for (key,value) in dictionary.items(): self.__setitem__(key,value)
