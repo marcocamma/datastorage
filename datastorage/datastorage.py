@@ -116,13 +116,14 @@ def dictToH5Group(d, group, link_copy=True):
             else:
               if isinstance(value,h5py.Dataset): value = value[:]; # hdf5 dataset have to be read first ...
             group[key] = value
-        except (TypeError,ValueError):
-            log.info("For %s, h5py could not handle the saving on its own, trying to convert it"%key)
+        except (TypeError,ValueError) as e:
+            log.debug("For %s, h5py could not handle the saving on its own, trying to convert it, error was %s"%(key,e))
             if isinstance(value,dict) or hasattr(value,"__dict__"):
                 if key not in group: group.create_group(key)
                 try:
                     value = dictToH5Group(value,group[key],link_copy=link_copy)
-                # objects have __dict__ but can be coverted to dict like only by DataStorage (and not by dict)
+                # objects have __dict__ but can be coverted to dict like only 
+                # by DataStorage (and not by dict)
                 except:
                     value = dictToH5Group(DataStorage(value),group[key],link_copy=link_copy)
             # take care of unicode (h5py can't handle numpy unicode arrays)
