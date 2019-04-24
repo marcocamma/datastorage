@@ -10,6 +10,7 @@ import math
 import h5py
 import collections
 import logging
+import pathlib
 log = logging.getLogger(__name__)
 
 
@@ -170,7 +171,7 @@ def npzToDict(npzFile):
 
 
 def npyToDict(npyFile):
-    d = unwrapArray(np.load(npyFile).item(), recursive=True)
+    d = unwrapArray(np.load(str(npyFile)).item(), recursive=True)
     return d
 
 
@@ -201,14 +202,15 @@ def toDict(datastorage_obj, recursive=True):
     return _toDict(datastorage_obj)
 
 def read(fname,raiseError=True,readH5pyDataset=True):
-    err_msg = "File " + fname + " does not exist"
-    if not os.path.isfile(fname):
+    fname = pathlib.Path(fname)
+    err_msg = "File " + str(fname) + " does not exist"
+    if not fname.is_file():
         if raiseError:
             raise ValueError(err_msg)
         else:
             log.error(err_msg)
             return None
-    extension = os.path.splitext(fname)[1]
+    extension = fname.suffix
     log.info("Reading storage file %s" % fname)
     if extension == ".npz":
         return DataStorage(npzToDict(fname))
@@ -220,7 +222,7 @@ def read(fname,raiseError=True,readH5pyDataset=True):
         try:
             return DataStorage(h5ToDict(fname,readH5pyDataset=readH5pyDataset))
         except Exception as e:
-            err_msg = "Could not read " + fname + " as hdf5 file, error was: %s"%e
+            err_msg = "Could not read " + str(fname) + " as hdf5 file, error was: %s"%e
             log.error(err_msg)
             if raiseError:
                 raise ValueError(err_msg)
@@ -232,9 +234,10 @@ def save(fname, d, link_copy=True,raiseError=False):
     """ link_copy is used by hdf5 saving only, it allows to creat link of identical arrays (saving space) """
     # make sure the object is dict (recursively) this allows reading it
     # without the DataStorage module
+    fname = pathlib.Path(fname)
     d = toDict(d, recursive=True)
-    d['filename'] = fname
-    extension = os.path.splitext(fname)[1]
+    d['filename'] = str(fname)
+    extension = fname.suffix
     log.info("Saving storage file %s" % fname)
     try:
         if extension == ".npz":
@@ -306,6 +309,9 @@ class DataStorage(dict):
             else:
                 self.filename = input_data
                 d = dict()
+        elif isinstance(input_data,np.ndarray) and input_data.dtype.names is not None:
+            for name in input_data.dtype.names:
+                d[name] = input_data[name]
         else:
             try:
                 d = input_data.__dict__
