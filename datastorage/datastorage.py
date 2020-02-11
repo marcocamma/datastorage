@@ -164,14 +164,14 @@ def h5ToDict(h5, readH5pyDataset=True):
 
 
 def npzToDict(npzFile):
-    with np.load(npzFile) as npz:
+    with np.load(npzFile, allow_pickle=True) as npz:
         d = dict(npz)
     d = unwrapArray(d, recursive=True)
     return d
 
 
 def npyToDict(npyFile):
-    d = unwrapArray(np.load(str(npyFile)).item(), recursive=True)
+    d = unwrapArray(np.load(str(npyFile), allow_pickle=True).item(), recursive=True)
     return d
 
 
