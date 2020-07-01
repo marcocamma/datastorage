@@ -423,3 +423,21 @@ class DataStorage(dict):
             fname = self.filename
         assert fname is not None
         save(fname, self, link_copy=link_copy,raiseError=raiseError)
+
+
+def unwrap(list_of_datastorages):
+    """ 
+    convert list of data storages in one datastorage with array elements
+    useful in conjuction with list comprehension
+
+    def f(x):
+        return DataStorage(x=x,x2=x**2,x3=x**3)
+
+    res = [f(i) for i in range(10)]
+    res = unwrap(res)
+    """
+    retout=DataStorage()
+    for key in list_of_datastorages[0].keys():
+        retout[key] = np.asarray([r[key] for r in list_of_datastorages])
+    return retout
+    useful
