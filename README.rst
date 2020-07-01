@@ -1,5 +1,5 @@
 datastorage
---------
+-----------
 
 To use simply do::
    >>> from datastorage import DataStorage
