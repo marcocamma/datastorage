@@ -47,12 +47,12 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
             # same thing... 
             # a[...] returns ndarray if a is a string
             # a.value returns a str(py3) or unicode(py2)
-            if readH5pyDataset or a.shape == (): a = a.value#[...]
+            if readH5pyDataset or a.shape == (): a = a[()] #.value#[...]
 
 
         # special None flag
         # not array needed for FutureWarning: elementwise comparison failed; ...
-        if not isinstance(a,np.ndarray) and a == "NONE_PYTHON_OBJECT": a = None
+        if not isinstance(a,np.ndarray) and (a == "NONE_PYTHON_OBJECT" or a == b"NONE_PYTHON_OBJECT"): a = None
  
         # clean up non-hdf5 specific
         if isinstance(a, np.ndarray) and a.ndim == 0:
