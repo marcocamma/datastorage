@@ -381,6 +381,8 @@ class DataStorage(dict):
                 value_str = str(obj)[:50]
             elif isinstance(obj, str):
                 value_str = obj[:50].replace('\r\n','\n').replace("\n"," ")
+            elif isinstance(obj, (float, int)):
+                value_str = "%g" % obj
             elif self[k] is None:
                 value_str = "None"
             else: 
