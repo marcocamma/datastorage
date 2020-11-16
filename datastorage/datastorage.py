@@ -359,7 +359,7 @@ class DataStorage(dict):
 
     def __repr__(self):
         keys = list(self.keys())
-        keys.sort()
+        keys.sort(key=lambda v: v.upper())
         if len(keys) == 0:
             return "Empty DataStorage"
         nchars = max(map(len, keys))
