@@ -13,6 +13,9 @@ import logging
 import pathlib
 log = logging.getLogger(__name__)
 
+# locking works only for h5py>=2.10
+_v = h5py.version.version_tuple
+has_h5py_version_lock = (_v.major > 2) or (_v.major >= 2 and _v.minor >= 10)
 
 # make sure dictionaries are ordered (somehow it does not work !)
 #dict = collections.OrderedDict
@@ -59,9 +62,15 @@ def unwrapArray(a, recursive=True, readH5pyDataset=True):
         if isinstance(a, np.ndarray) and a.ndim == 0:
             a = a.item()
 
+        # strings are sometime added in "O" type
+        if hasattr(a,"dtype") and a.dtype.char == "O" and a.ndim == 0:
+            a = a[()].decode("utf8")
+
         # convert to str (for example h5py can't save numpy unicode)
         if isinstance(a, np.ndarray) and a.dtype.char == "S":
             a = a.astype(str)
+
+
 
         if recursive:
             if "items" in dir(a):  # dict, h5py groups, npz file
@@ -150,6 +159,8 @@ def dictToH5(h5, d, link_copy=False):
         h5py is not capable of handling dictionaries natively"""
     global _array_cache
     _array_cache = dict()
+    if has_h5py_version_lock:
+        os.environ["HDF5_USE_FILE_LOCKING"] = "TRUE"
     h5 = h5py.File(h5, mode="w")
     dictToH5Group(d, h5["/"], link_copy=link_copy)
     h5.close()
@@ -158,6 +169,8 @@ def dictToH5(h5, d, link_copy=False):
 
 def h5ToDict(h5, readH5pyDataset=True):
     """ Read a hdf5 file into a dictionary """
+    if has_h5py_version_lock:
+        os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
     h = h5py.File(h5, "r")
     ret = unwrapArray(h, recursive=True, readH5pyDataset=readH5pyDataset)
     if readH5pyDataset: h.close()
