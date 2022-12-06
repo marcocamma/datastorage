@@ -142,7 +142,7 @@ def _add_h5dataset_to_dict(
     if isinstance(path, str) and path == "auto":
         path = h5_dataset.name
     attrs = dict(h5_dataset.attrs) if add_attrs else None
-    print(str(h5_dataset),add_attrs,attrs)
+    #print(str(h5_dataset),add_attrs,attrs)
     data = h5_dataset[()] if readH5pyDataset else h5_dataset
     if decode_bytes and isinstance(data, (np.bytes_, bytes)):
         data = data.decode("utf8")
