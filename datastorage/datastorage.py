@@ -301,7 +301,7 @@ def dictToH5Group(d, group, link_copy=True):
             elif isinstance(value, np.ndarray) and value.dtype.char == "U":
                 value = np.asarray([vv.encode("ascii") for vv in value])
                 group[key] = value
-            elif isinstance(value, collections.Iterable):
+            elif isinstance(value, collections.abc.Iterable):
                 if key not in group:
                     group.create_group(key)
                 group[key].attrs["IS_LIST"] = True
